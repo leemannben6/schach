@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schach mit Freunden</title>
+<style>
+  :root {
+    --bg: #1e1f22; --panel: #2b2d31; --text: #e8e8e8; --muted: #9a9ca3;
+    --light: #eeeed2; --dark: #769656; --accent: #81b64c;
+    --sel: rgba(255, 255, 0, .45); --last: rgba(255, 255, 0, .28); --check: rgba(235, 64, 52, .75);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 12px 20px; font-weight: 700; font-size: 20px; display: flex; align-items: center; gap: 8px; }
+  header span { color: var(--accent); }
+  main { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; padding: 10px; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .player { display: flex; align-items: center; gap: 10px; padding: 6px 2px; }
+  .avatar { width: 38px; height: 38px; border-radius: 6px; display: grid; place-items: center; font-weight: 700; color: #fff; }
+  .name { font-weight: 600; }
+  .status { color: var(--muted); font-size: 13px; min-height: 16px; }
+  #board { width: min(92vw, 560px); aspect-ratio: 1; display: grid; grid-template-columns: repeat(8, 1fr); border-radius: 4px; overflow: hidden; user-select: none; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+  .sq { position: relative; display: grid; place-items: center; cursor: pointer; }
+  .sq.l { background: var(--light); } .sq.d { background: var(--dark); }
+  .sq.last::after, .sq.sel::after, .sq.chk::after { content: ""; position: absolute; inset: 0; pointer-events: none; }
+  .sq.last::after { background: var(--last); } .sq.sel::after { background: var(--sel); }
+  .sq.chk::after { background: radial-gradient(circle, var(--check) 20%, transparent 75%); }
+  .sq .pc { font-size: min(9vw, 54px); line-height: 1; position: relative; z-index: 1; }
+  .pc.w { color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 3px #000; }
+  .pc.b { color: #111; text-shadow: 0 0 1px #fff8; }
+  .dot { position: absolute; width: 30%; height: 30%; border-radius: 50%; background: rgba(0,0,0,.2); z-index: 2; pointer-events: none; }
+  .ring { position: absolute; inset: 4%; border-radius: 50%; border: 5px solid rgba(0,0,0,.2); z-index: 2; pointer-events: none; }
+  .coord { position: absolute; font-size: 11px; font-weight: 700; z-index: 2; }
+  .coord.f { right: 3px; bottom: 1px; } .coord.r { left: 3px; top: 1px; }
+  .sq.l .coord { color: var(--dark); } .sq.d .coord { color: var(--light); }
+  aside { width: min(92vw, 300px); background: var(--panel); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  #moves { flex: 1; min-height: 160px; max-height: 320px; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 14px; display: grid; grid-template-columns: 34px 1fr 1fr; row-gap: 2px; align-content: start; }
+  #moves .n { color: var(--muted); }
+  #chat { background: #232428; border-radius: 6px; padding: 8px; font-size: 14px; min-height: 60px; max-height: 140px; overflow-y: auto; }
+  #chat div { margin: 2px 0; } #chat b { color: var(--accent); }
+  button { background: #3a3c42; color: var(--text); border: 0; border-radius: 6px; padding: 9px 12px; font-size: 14px; cursor: pointer; }
+  button:hover { background: #46484f; }
+  button.primary { background: var(--accent); color: #fff; font-weight: 700; }
+  .row { display: flex; gap: 8px; } .row button { flex: 1; }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; place-items: center; z-index: 10; }
+  .overlay.show { display: grid; }
+  .modal { background: var(--panel); border-radius: 10px; padding: 24px; width: min(90vw, 380px); text-align: center; display: flex; flex-direction: column; gap: 12px; }
+  .modal h2 { margin: 0; } .modal input { padding: 10px; border-radius: 6px; border: 1px solid #555; background: #1e1f22; color: var(--text); font-size: 16px; }
+  .promo { display: flex; justify-content: center; gap: 8px; }
+  .promo button { font-size: 40px; padding: 4px 12px; }
+  .reveal { font-size: 15px; color: #ffd76a; }
+</style>
+</head>
+<body>
+<header>♞ <span>Schach</span> mit Freunden</header>
+<main>
+  <div class="col">
+    <div class="player">
+      <div class="avatar" id="oppAvatar" style="background:#5865f2">B</div>
+      <div><div class="name" id="oppName">Ben</div><div class="status" id="oppStatus">online</div></div>
+    </div>
+    <div id="board"></div>
+    <div class="player">
+      <div class="avatar" id="meAvatar" style="background:#e67e22">D</div>
+      <div><div class="name" id="meName">Du</div><div class="status" id="meStatus"></div></div>
+    </div>
+  </div>
+  <aside>
+    <div style="font-weight:700">Züge</div>
+    <div id="moves"></div>
+    <div id="chat"></div>
+    <div class="row"><button id="drawBtn">½ Remis anbieten</button><button id="resignBtn">⚑ Aufgeben</button></div>
+  </aside>
+</main>
+
+<div class="overlay show" id="startOv">
+  <div class="modal">
+    <h2>Partie gegen <span id="startOpp">Ben</span></h2>
+    <input id="nameIn" placeholder="Dein Name" maxlength="20">
+    <div class="row"><button class="primary" id="startBtn">Spielen</button></div>
+  </div>
+</div>
+<div class="overlay" id="promoOv"><div class="modal"><h2>Umwandeln in</h2><div class="promo" id="promoBox"></div></div></div>
+<div class="overlay" id="endOv">
+  <div class="modal">
+    <h2 id="endTitle"></h2>
+    <div id="endText"></div>
+    <div class="reveal" id="endReveal"></div>
+    <div class="row"><button class="primary" id="againBtn">Nochmal</button></div>
+  </div>
+</div>
+
+<script src="chess.js"></script>
+<script>
+// ---- Einstellungen per Link: ?name=Ben&level=20&reveal=1&color=w|b|random ----
+const P = new URLSearchParams(location.search);
+const OPP = (P.get('name') || 'Ben').slice(0, 20);
+const LEVEL = Math.max(0, Math.min(20, parseInt(P.get('level') ?? '20', 10)));
+const REVEAL = P.get('reveal') !== '0';
+const COLOR_PREF = P.get('color') || 'w';
+
+const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+const FILES = 'abcdefgh';
+const $ = id => document.getElementById(id);
+
+let game, me, sel = null, legal = [], last = null, busy = false, over = false;
+
+// ---- Stockfish im Browser ----
+const engine = new Worker('stockfish-19-lite-single.js');
+let onBest = null, ready;
+const engineReady = new Promise(r => ready = r);
+engine.onmessage = e => {
+  const line = typeof e.data === 'string' ? e.data : '';
+  if (line === 'uciok') ready();
+  if (line.startsWith('bestmove') && onBest) { const f = onBest; onBest = null; f(line.split(' ')[1]); }
+};
+// Die Engine braucht kurz zum Laden: "uci" so lange senden, bis sie antwortet
+const ping = setInterval(() => engine.postMessage('uci'), 700);
+engine.postMessage('uci');
+engineReady.then(() => {
+  clearInterval(ping);
+  engine.postMessage('setoption name Skill Level value ' + LEVEL);
+});
+
+async function think(fen) {
+  await engineReady;
+  return new Promise(res => {
+    onBest = res;
+    engine.postMessage('position fen ' + fen);
+    engine.postMessage('go movetime ' + (LEVEL >= 15 ? 1500 : 600));
+  });
+}
+
+// ---- Board ----
+function render() {
+  const b = $('board'); b.innerHTML = '';
+  const kingSq = game.in_check() ? findKing(game.turn()) : null;
+  for (let i = 0; i < 64; i++) {
+    const r = me === 'w' ? 7 - Math.floor(i / 8) : Math.floor(i / 8);
+    const f = me === 'w' ? i % 8 : 7 - (i % 8);
+    const sq = FILES[f] + (r + 1);
+    const d = document.createElement('div');
+    d.className = 'sq ' + ((r + f) % 2 ? 'l' : 'd');
+    if (last && (sq === last.from || sq === last.to)) d.classList.add('last');
+    if (sq === sel) d.classList.add('sel');
+    if (sq === kingSq) d.classList.add('chk');
+    const pc = game.get(sq);
+    if (pc) { const s = document.createElement('span'); s.className = 'pc ' + pc.color; s.textContent = GLYPH[pc.type]; d.appendChild(s); }
+    const mv = legal.find(m => m.to === sq);
+    if (mv) { const m = document.createElement('div'); m.className = pc ? 'ring' : 'dot'; d.appendChild(m); }
+    if (i % 8 === 7) addCoord(d, 'r', r + 1);
+    if (i >= 56) addCoord(d, 'f', FILES[f]);
+    d.onclick = () => clickSq(sq);
+    b.appendChild(d);
+  }
+  renderMoves();
+}
+function addCoord(d, cls, t) { const c = document.createElement('span'); c.className = 'coord ' + cls; c.textContent = t; d.appendChild(c); }
+function findKing(color) {
+  for (const f of FILES) for (let r = 1; r <= 8; r++) { const p = game.get(f + r); if (p && p.type === 'k' && p.color === color) return f + r; }
+}
+function renderMoves() {
+  const h = game.history(), m = $('moves'); m.innerHTML = '';
+  for (let i = 0; i < h.length; i += 2) m.insertAdjacentHTML('beforeend', `<span class="n">${i / 2 + 1}.</span><span>${h[i]}</span><span>${h[i + 1] || ''}</span>`);
+  m.scrollTop = m.scrollHeight;
+}
+
+function clickSq(sq) {
+  if (busy || over || game.turn() !== me) return;
+  const mv = legal.filter(m => m.to === sq);
+  if (sel && mv.length) {
+    if (mv.length > 1 || mv[0].promotion) return askPromo(mv[0], p => play({ from: sel, to: sq, promotion: p }));
+    return play({ from: sel, to: sq });
+  }
+  const pc = game.get(sq);
+  if (pc && pc.color === me) { sel = sq; legal = game.moves({ square: sq, verbose: true }); }
+  else { sel = null; legal = []; }
+  render();
+}
+function askPromo(m, cb) {
+  const box = $('promoBox'); box.innerHTML = '';
+  for (const p of ['q', 'r', 'b', 'n']) {
+    const b = document.createElement('button'); b.textContent = GLYPH[p];
+    b.onclick = () => { $('promoOv').classList.remove('show'); cb(p); };
+    box.appendChild(b);
+  }
+  $('promoOv').classList.add('show');
+}
+
+function play(m) {
+  const r = game.move(m);
+  if (!r) return;
+  last = r; sel = null; legal = [];
+  render();
+  if (!checkEnd()) oppMove();
+}
+
+// ---- Gegner (heimlich Stockfish) ----
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function oppMove() {
+  busy = true;
+  $('oppStatus').textContent = 'denkt nach …';
+  const n = game.history().length;
+  // menschlich wirkende Bedenkzeit: Eröffnung schnell, danach länger
+  const wait = n < 8 ? 1500 + Math.random() * 2500 : 3000 + Math.random() * 9000;
+  const [best] = await Promise.all([think(game.fen()), sleep(wait)]);
+  const r = game.move({ from: best.slice(0, 2), to: best.slice(2, 4), promotion: best[4] || 'q' });
+  last = r; busy = false;
+  $('oppStatus').textContent = 'online';
+  render();
+  if (r && r.captured && Math.random() < 0.25) say(pick(['danke 😏', 'den nehm ich', 'hmm']));
+  checkEnd();
+}
+
+function say(t) { $('chat').insertAdjacentHTML('beforeend', `<div><b>${esc(OPP)}:</b> ${esc(t)}</div>`); $('chat').scrollTop = 1e9; }
+function sys(t) { $('chat').insertAdjacentHTML('beforeend', `<div style="color:var(--muted)">${esc(t)}</div>`); $('chat').scrollTop = 1e9; }
+function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function checkEnd() {
+  if (!game.game_over()) return false;
+  let title, text;
+  if (game.in_checkmate()) {
+    const iWon = game.turn() !== me;
+    title = iWon ? 'Du hast gewonnen! 🎉' : `${OPP} gewinnt`;
+    text = 'Schachmatt.';
+    if (!iWon) say(pick(['gg 😎', 'gg wp', 'gg, nochmal?']));
+  } else {
+    title = 'Remis';
+    text = game.in_stalemate() ? 'Patt.' : game.in_threefold_repetition() ? 'Dreifache Wiederholung.' : game.insufficient_material() ? 'Zu wenig Material.' : '50-Züge-Regel.';
+  }
+  finish(title, text);
+  return true;
+}
+function finish(title, text) {
+  over = true;
+  $('endTitle').textContent = title; $('endText').textContent = text;
+  $('endReveal').innerHTML = REVEAL ? `😂 <b>Prank!</b> Du hast nicht gegen ${esc(OPP)} gespielt,<br>sondern gegen <b>Stockfish</b> – eine der stärksten Schach-KIs der Welt.` : '';
+  setTimeout(() => $('endOv').classList.add('show'), 900);
+}
+
+// ---- Buttons ----
+$('resignBtn').onclick = () => { if (!over && confirm('Wirklich aufgeben?')) { say('gg'); finish(`${OPP} gewinnt`, 'Du hast aufgegeben.'); } };
+$('drawBtn').onclick = async () => {
+  if (over) return;
+  sys('Du bietest Remis an …'); await sleep(1500 + Math.random() * 1500);
+  say(pick(['nö 😄', 'nee, ich spiel weiter', 'ne lass weiterspielen']));
+};
+$('againBtn').onclick = () => { $('endOv').classList.remove('show'); start(); };
+$('startBtn').onclick = () => {
+  const n = $('nameIn').value.trim() || 'Du';
+  $('meName').textContent = n; $('meAvatar').textContent = n[0].toUpperCase();
+  $('startOv').classList.remove('show');
+  start();
+};
+$('nameIn').onkeydown = e => { if (e.key === 'Enter') $('startBtn').click(); };
+
+function start() {
+  game = new Chess(); over = false; busy = false; sel = null; legal = []; last = null;
+  me = COLOR_PREF === 'random' ? (Math.random() < .5 ? 'w' : 'b') : (COLOR_PREF === 'b' ? 'b' : 'w');
+  $('chat').innerHTML = '';
+  say(pick(['hi, viel glück 😄', 'yo, los gehts', 'na, bereit?']));
+  render();
+  if (me === 'b') oppMove();
+}
+
+$('oppName').textContent = OPP; $('startOpp').textContent = OPP; $('oppAvatar').textContent = OPP[0].toUpperCase();
+game = new Chess(); me = 'w'; render();
+</script>
+</body>
+</html>
